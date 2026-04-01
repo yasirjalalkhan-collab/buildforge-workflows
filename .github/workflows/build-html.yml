@@ -1,0 +1,259 @@
+name: Build HTML WebView APK
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: 'App Name'
+        required: true
+        type: string
+      pkg_name:
+        description: 'Package Name'
+        required: true
+        type: string
+      version:
+        description: 'Version'
+        required: false
+        type: string
+        default: '1.0.0'
+      version_code:
+        description: 'Version Code'
+        required: false
+        type: string
+        default: '1'
+      html_file:
+        description: 'Entry HTML File'
+        required: false
+        type: string
+        default: 'index.html'
+      orientation:
+        description: 'Screen Orientation'
+        required: false
+        type: string
+        default: 'portrait'
+      has_icon:
+        description: 'Has icon.png'
+        required: false
+        type: string
+        default: 'no'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK components
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-33" "build-tools;33.0.2"
+
+      - name: Install ImageMagick
+        run: sudo apt-get install -y imagemagick
+
+      - name: Create project structure
+        run: |
+          PKG="${{ inputs.pkg_name }}"
+          PKG_PATH=$(echo "$PKG" | tr '.' '/')
+          mkdir -p app/src/main/java/${PKG_PATH}
+          mkdir -p app/src/main/assets/www
+          mkdir -p app/src/main/res/mipmap-mdpi
+          mkdir -p app/src/main/res/mipmap-hdpi
+          mkdir -p app/src/main/res/mipmap-xhdpi
+          mkdir -p app/src/main/res/mipmap-xxhdpi
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          mkdir -p app/src/main/res/values
+          mkdir -p gradle/wrapper
+
+      - name: Copy HTML files
+        run: |
+          if [ -d "www" ]; then
+            cp -r www/. app/src/main/assets/www/
+          else
+            ENTRY="${{ inputs.html_file }}"
+            ENTRY_PATH=$(find . -name "$ENTRY" ! -path "./.git/*" ! -path "./app/*" | head -1)
+            if [ -n "$ENTRY_PATH" ]; then
+              cp -r "$(dirname $ENTRY_PATH)"/. app/src/main/assets/www/
+            else
+              find . -maxdepth 3 ! -path "./.git/*" ! -path "./app/*" ! -name "*.yml" ! -name "icon.png" -type f -exec cp --parents {} app/src/main/assets/www/ \;
+            fi
+          fi
+          echo "Files copied:"
+          ls app/src/main/assets/www/
+
+      - name: Generate icons
+        run: |
+          if [ "${{ inputs.has_icon }}" = "yes" ] && [ -f "icon.png" ]; then
+            convert icon.png -resize 48x48   app/src/main/res/mipmap-mdpi/ic_launcher.png
+            convert icon.png -resize 72x72   app/src/main/res/mipmap-hdpi/ic_launcher.png
+            convert icon.png -resize 96x96   app/src/main/res/mipmap-xhdpi/ic_launcher.png
+            convert icon.png -resize 144x144 app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+            convert icon.png -resize 192x192 app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          else
+            for pair in "48:mdpi" "72:hdpi" "96:xhdpi" "144:xxhdpi" "192:xxxhdpi"; do
+              px="${pair%%:*}"; dpi="${pair##*:}"
+              convert -size ${px}x${px} xc:"#d97706" -fill white -font DejaVu-Sans-Bold \
+                -pointsize $((px/3)) -gravity center -annotate 0 "BF" \
+                app/src/main/res/mipmap-${dpi}/ic_launcher.png
+            done
+          fi
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp app/src/main/res/mipmap-${d}/ic_launcher.png \
+               app/src/main/res/mipmap-${d}/ic_launcher_round.png
+          done
+
+      - name: Create Android source files
+        run: |
+          PKG="${{ inputs.pkg_name }}"
+          APP="${{ inputs.app_name }}"
+          HTML="${{ inputs.html_file }}"
+          ORI="${{ inputs.orientation }}"
+          PKG_PATH=$(echo "$PKG" | tr '.' '/')
+          python3 -c "
+          import os
+          pkg = '$PKG'
+          html = '$HTML'
+          app = '$APP'
+          ori = '$ORI'
+          pkg_path = pkg.replace('.', '/')
+          os.makedirs(f'app/src/main/java/{pkg_path}', exist_ok=True)
+          java = f'''package {pkg};
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebViewClient;
+          import android.webkit.PermissionRequest;
+          public class MainActivity extends Activity {{
+            @Override
+            protected void onCreate(Bundle savedInstanceState) {{
+              super.onCreate(savedInstanceState);
+              WebView w = new WebView(this);
+              setContentView(w);
+              WebSettings s = w.getSettings();
+              s.setJavaScriptEnabled(true);
+              s.setDomStorageEnabled(true);
+              s.setAllowFileAccess(true);
+              s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+              w.setWebViewClient(new WebViewClient());
+              w.setWebChromeClient(new WebChromeClient() {{
+                @Override
+                public void onPermissionRequest(PermissionRequest r) {{ r.grant(r.getResources()); }}
+              }});
+              w.loadUrl(\"file:///android_asset/www/{html}\");
+            }}
+          }}'''
+          open(f'app/src/main/java/{pkg_path}/MainActivity.java', 'w').write(java)
+          strings = f'<?xml version=\"1.0\" encoding=\"utf-8\"?><resources><string name=\"app_name\">{app}</string></resources>'
+          open('app/src/main/res/values/strings.xml', 'w').write(strings)
+          manifest = f'''<?xml version=\"1.0\" encoding=\"utf-8\"?>
+          <manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"{pkg}\">
+            <uses-permission android:name=\"android.permission.INTERNET\"/>
+            <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>
+            <application android:label=\"{app}\" android:icon=\"@mipmap/ic_launcher\" android:allowBackup=\"true\" android:theme=\"@android:style/Theme.NoTitleBar.Fullscreen\">
+              <activity android:name=\".MainActivity\" android:exported=\"true\" android:screenOrientation=\"{ori}\">
+                <intent-filter>
+                  <action android:name=\"android.intent.action.MAIN\"/>
+                  <category android:name=\"android.intent.category.LAUNCHER\"/>
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>'''
+          open('app/src/main/AndroidManifest.xml', 'w').write(manifest)
+          print('Android source files created OK')
+          "
+
+      - name: Create Gradle files
+        run: |
+          PKG="${{ inputs.pkg_name }}"
+          VN="${{ inputs.version }}"
+          VC="${{ inputs.version_code }}"
+          cat > app/build.gradle << GRADLE
+          plugins { id 'com.android.application' }
+          android {
+            namespace "$PKG"
+            compileSdk 33
+            defaultConfig {
+              applicationId "$PKG"
+              minSdk 21
+              targetSdk 33
+              versionCode $VC
+              versionName "$VN"
+            }
+            signingConfigs {
+              release {
+                storeFile file("release.keystore")
+                storePassword "buildforge@2024"
+                keyAlias "mykey"
+                keyPassword "buildforge@2024"
+              }
+            }
+            buildTypes {
+              release { minifyEnabled false; signingConfig signingConfigs.release }
+            }
+          }
+          dependencies {}
+          GRADLE
+          cat > build.gradle << GRADLE
+          plugins { id 'com.android.application' version '8.1.0' apply false }
+          GRADLE
+          cat > settings.gradle << GRADLE
+          pluginManagement {
+            repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+            repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "myapp"
+          include ':app'
+          GRADLE
+          curl -sL -o gradle/wrapper/gradle-wrapper.jar \
+            https://github.com/gradle/gradle/raw/v8.1.0/gradle/wrapper/gradle-wrapper.jar
+          curl -sL -o gradlew \
+            https://raw.githubusercontent.com/gradle/gradle/v8.1.0/gradlew
+          chmod +x gradlew
+          cat > gradle/wrapper/gradle-wrapper.properties << GRADLE
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.1-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          GRADLE
+
+      - name: Setup Keystore
+        run: |
+          if [ -f "release.keystore" ]; then
+            cp release.keystore app/release.keystore
+          else
+            keytool -genkey -v \
+              -keystore app/release.keystore \
+              -alias mykey \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -storepass buildforge@2024 \
+              -keypass buildforge@2024 \
+              -dname "CN=BuildForge, O=BuildForge, C=US"
+          fi
+
+      - name: Build APK
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Prepare output
+        run: |
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          echo "APK: $APK"
+          cp "$APK" "${{ inputs.app_name }}-v${{ inputs.version }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-v${{ inputs.version }}-APK
+          path: ${{ inputs.app_name }}-v${{ inputs.version }}.apk
+          retention-days: 30
