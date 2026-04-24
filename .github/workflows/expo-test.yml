@@ -1,0 +1,81 @@
+name: Expo Go Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Setup mode'
+        required: true
+        type: choice
+        options:
+          - first_time
+          - update
+        default: 'update'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-expo-${{ hashFiles('package.json') }}
+          restore-keys: ${{ runner.os }}-expo-
+
+      - name: First time setup
+        if: ${{ inputs.mode == 'first_time' }}
+        run: echo "aW1wb3J0IG9zLCBzdWJwcm9jZXNzLCBzeXMKCnByaW50KCc9PT0gRmlyc3QgVGltZSBTZXR1cCA9PT0nKQojIEluc3RhbGwgZGVwZW5kZW5jaWVzCmlmIG5vdCBvcy5wYXRoLmlzZGlyKCdub2RlX21vZHVsZXMnKToKICAgIHByaW50KCdJbnN0YWxsaW5nIG5wbSBwYWNrYWdlcy4uLicpCiAgICBzdWJwcm9jZXNzLnJ1bihbJ25wbScsICdpbnN0YWxsJ10sIGNoZWNrPVRydWUpCmVsc2U6CiAgICBwcmludCgnbm9kZV9tb2R1bGVzIGZvdW5kLCBydW5uaW5nIG5wbSBpbnN0YWxsIHRvIHVwZGF0ZS4uLicpCiAgICBzdWJwcm9jZXNzLnJ1bihbJ25wbScsICdpbnN0YWxsJ10sIGNoZWNrPVRydWUpCgojIEV4cG8gcHJlYnVpbGQKaWYgbm90IG9zLnBhdGguaXNkaXIoJ2FuZHJvaWQnKToKICAgIHByaW50KCdSdW5uaW5nIGV4cG8gcHJlYnVpbGQuLi4nKQogICAgc3VicHJvY2Vzcy5ydW4oWyducHgnLCAnZXhwbycsICdwcmVidWlsZCcsICctLXBsYXRmb3JtJywgJ2FuZHJvaWQnLCAnLS1uby1pbnN0YWxsJ10sIGNoZWNrPVRydWUpCmVsc2U6CiAgICBwcmludCgnYW5kcm9pZC8gZm9sZGVyIGV4aXN0cywgc2tpcHBpbmcgcHJlYnVpbGQnKQoKcHJpbnQoJ0ZpcnN0IHRpbWUgc2V0dXAgY29tcGxldGUhJykK" | base64 -d | python3
+
+      - name: Update mode setup
+        if: ${{ inputs.mode == 'update' }}
+        run: echo "aW1wb3J0IG9zLCBzdWJwcm9jZXNzLCBzeXMKCnByaW50KCc9PT0gVXBkYXRlIE1vZGUgPT09JykKIyBDaGVjayBpZiBwYWNrYWdlLmpzb24gY2hhbmdlZApwa2dfY2hhbmdlZCA9IEZhbHNlCnRyeToKICAgIHJlc3VsdCA9IHN1YnByb2Nlc3MucnVuKFsnZ2l0JywgJ2RpZmYnLCAnSEVBRH4xJywgJy0tbmFtZS1vbmx5J10sCiAgICAgICAgICAgICAgICAgICAgICAgICAgY2FwdHVyZV9vdXRwdXQ9VHJ1ZSwgdGV4dD1UcnVlKQogICAgcGtnX2NoYW5nZWQgPSAncGFja2FnZS5qc29uJyBpbiByZXN1bHQuc3Rkb3V0CmV4Y2VwdCBFeGNlcHRpb246CiAgICBwa2dfY2hhbmdlZCA9IFRydWUgICMgYXNzdW1lIGNoYW5nZWQKCmlmIG5vdCBvcy5wYXRoLmlzZGlyKCdub2RlX21vZHVsZXMnKToKICAgIHByaW50KCdub2RlX21vZHVsZXMgbm90IGZvdW5kLCBpbnN0YWxsaW5nLi4uJykKICAgIHN1YnByb2Nlc3MucnVuKFsnbnBtJywgJ2luc3RhbGwnXSwgY2hlY2s9VHJ1ZSkKZWxpZiBwa2dfY2hhbmdlZDoKICAgIHByaW50KCdwYWNrYWdlLmpzb24gY2hhbmdlZCwgdXBkYXRpbmcgcGFja2FnZXMuLi4nKQogICAgc3VicHJvY2Vzcy5ydW4oWyducG0nLCAnaW5zdGFsbCddLCBjaGVjaz1UcnVlKQplbHNlOgogICAgcHJpbnQoJ05vIHBhY2thZ2UgY2hhbmdlcywgc2tpcHBpbmcgbnBtIGluc3RhbGwnKQoKIyBFeHBvIHByZWJ1aWxkIGNoZWNrCmlmIG5vdCBvcy5wYXRoLmlzZGlyKCdhbmRyb2lkJyk6CiAgICBwcmludCgnYW5kcm9pZC8gbWlzc2luZywgcnVubmluZyBleHBvIHByZWJ1aWxkLi4uJykKICAgIHN1YnByb2Nlc3MucnVuKFsnbnB4JywgJ2V4cG8nLCAncHJlYnVpbGQnLCAnLS1wbGF0Zm9ybScsICdhbmRyb2lkJywgJy0tbm8taW5zdGFsbCddLCBjaGVjaz1UcnVlKQplbHNlOgogICAgcHJpbnQoJ2FuZHJvaWQvIGV4aXN0cywgc2tpcHBpbmcgcHJlYnVpbGQnKQoKcHJpbnQoJ1VwZGF0ZSBjb21wbGV0ZSEnKQo=" | base64 -d | python3
+
+      - name: Install ngrok
+        run: npm install -g @expo/ngrok@^4.1.0 || npm install -g ngrok
+
+      - name: Start Expo Tunnel and capture URL
+        run: |
+          # Start expo in background, log output
+          npx expo start --tunnel --no-dev 2>&1 | tee /tmp/expo_output.log &
+          EXPO_PID=$!
+
+          # Wait for URL
+          echo "aW1wb3J0IHN5cywgcmUsIHRpbWUsIG9zCgpwcmludCgnV2FpdGluZyBmb3IgdHVubmVsIFVSTC4uLicpCmxvZ19maWxlID0gJy90bXAvZXhwb19vdXRwdXQubG9nJwp0aW1lb3V0ID0gMTIwCnN0YXJ0ID0gdGltZS50aW1lKCkKdXJsID0gTm9uZQoKd2hpbGUgdGltZS50aW1lKCkgLSBzdGFydCA8IHRpbWVvdXQ6CiAgICBpZiBvcy5wYXRoLmV4aXN0cyhsb2dfZmlsZSk6CiAgICAgICAgY29udGVudCA9IG9wZW4obG9nX2ZpbGUpLnJlYWQoKQogICAgICAgICMgTG9vayBmb3IgZXhwOi8vIG9yIG5ncm9rIFVSTAogICAgICAgIHBhdHRlcm5zID0gWwogICAgICAgICAgICByJyhleHA6Ly9bYS16MC05XC1dK1wubmdyb2tbXlxzXG4iXSspJywKICAgICAgICAgICAgcicoZXhwOi8vW2EtejAtOVwtXStcLm5ncm9rLWZyZWVcLmFwcFteXHNcbiJdKyknLAogICAgICAgICAgICByJyhodHRwcz86Ly9bYS16MC05XC1dK1wubmdyb2tbXlxzXG4iXSspJywKICAgICAgICAgICAgcidNZXRybyB3YWl0aW5nIG9uIChleHA6Ly9bXlxzXG4iXSspJywKICAgICAgICBdCiAgICAgICAgZm9yIHBhdHRlcm4gaW4gcGF0dGVybnM6CiAgICAgICAgICAgIG0gPSByZS5zZWFyY2gocGF0dGVybiwgY29udGVudCkKICAgICAgICAgICAgaWYgbToKICAgICAgICAgICAgICAgIHVybCA9IG0uZ3JvdXAoMSkKICAgICAgICAgICAgICAgIGJyZWFrCiAgICAgICAgaWYgdXJsOgogICAgICAgICAgICBicmVhawogICAgdGltZS5zbGVlcCgzKQoKaWYgdXJsOgogICAgcHJpbnQoJ0VYUE9fVVJMPScgKyB1cmwpCiAgICB3aXRoIG9wZW4oJy90bXAvZXhwb191cmwudHh0JywgJ3cnKSBhcyBmOgogICAgICAgIGYud3JpdGUodXJsKQplbHNlOgogICAgcHJpbnQoJ1VSTCBub3QgZm91bmQgaW4gdGltZScpCiAgICB3aXRoIG9wZW4oJy90bXAvZXhwb191cmwudHh0JywgJ3cnKSBhcyBmOgogICAgICAgIGYud3JpdGUoJ1VSTF9OT1RfRk9VTkQnKQo=" | base64 -d | python3
+
+          # Save URL
+          if [ -f /tmp/expo_url.txt ]; then
+            URL=$(cat /tmp/expo_url.txt)
+            echo "==============================="
+            echo "EXPO GO URL: $URL"
+            echo "==============================="
+            printf '{"url":"%s","mode":"%s","time":"%s"}' "$URL" "${{ inputs.mode }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > expo-test-url.json
+          fi
+
+          # Keep tunnel alive for 60 minutes
+          echo "Tunnel active - keeping alive for 60 minutes..."
+          sleep 3600
+          kill $EXPO_PID 2>/dev/null || true
+
+      - name: Upload URL artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expo-test-url
+          path: expo-test-url.json
+          retention-days: 1
