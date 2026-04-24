@@ -1,0 +1,69 @@
+name: Expo Preview (EAS Update)
+
+on:
+  workflow_call:
+    inputs:
+      branch_name:
+        description: 'Preview branch name'
+        required: false
+        type: string
+        default: 'preview'
+      channel:
+        description: 'EAS channel'
+        required: false
+        type: string
+        default: 'preview'
+    secrets:
+      EXPO_TOKEN:
+        required: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Validate app.json
+        run: echo "aW1wb3J0IGpzb24sIG9zLCBzeXMKCmlmIG5vdCBvcy5wYXRoLmV4aXN0cygnYXBwLmpzb24nKToKICAgIHByaW50KCdFUlJPUjogYXBwLmpzb24gbm90IGZvdW5kJykKICAgIHN5cy5leGl0KDEpCgp3aXRoIG9wZW4oJ2FwcC5qc29uJykgYXMgZjoKICAgIGRhdGEgPSBqc29uLmxvYWQoZikKCmV4cG8gPSBkYXRhLmdldCgnZXhwbycsIHt9KQppZiBub3QgZXhwby5nZXQoJ3NsdWcnKToKICAgIGV4cG9bJ3NsdWcnXSA9IGV4cG8uZ2V0KCduYW1lJywgJ215LWFwcCcpLmxvd2VyKCkucmVwbGFjZSgnICcsICctJykKICAgIGRhdGFbJ2V4cG8nXSA9IGV4cG8KICAgIHdpdGggb3BlbignYXBwLmpzb24nLCAndycpIGFzIGY6CiAgICAgICAganNvbi5kdW1wKGRhdGEsIGYsIGluZGVudD0yKQogICAgcHJpbnQoJ0FkZGVkIHNsdWc6ICcgKyBleHBvWydzbHVnJ10pCgppZiBub3QgZXhwby5nZXQoJ2V4dHJhJywge30pLmdldCgnZWFzJywge30pLmdldCgncHJvamVjdElkJyk6CiAgICBwcmludCgnV0FSTklORzogTm8gRUFTIHByb2plY3RJZCAtIHJ1biBlYXMgaW5pdCBmaXJzdCcpCgpwcmludCgnYXBwLmpzb24gT0s6ICcgKyBleHBvLmdldCgnbmFtZScsICd1bmtub3duJykpCg==" | base64 -d | python3
+
+      - name: Create eas.json if missing
+        run: |
+          [ -f "eas.json" ] && echo "exists" && exit 0
+          echo '{"cli":{"version":">= 5.0.0"},"build":{"preview":{"distribution":"internal"}}}' > eas.json
+          echo "eas.json created"
+
+      - name: Run EAS Update
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas update \
+            --branch "${{ inputs.branch_name }}" \
+            --message "BuildForge preview $(date -u +%Y%m%d-%H%M)" \
+            --non-interactive \
+            --json > /tmp/eas_out.json 2>&1 || true
+          echo "=== EAS Output ===" && cat /tmp/eas_out.json | head -30
+
+      - name: Extract and save preview URL
+        run: |
+          URL=$(echo "aW1wb3J0IGpzb24sIHN5cywgcmUKCnRyeToKICAgIGRhdGEgPSBvcGVuKCcvdG1wL2Vhc19vdXRwdXQuanNvbicpLnJlYWQoKQogICAgYXJyID0ganNvbi5sb2FkcyhkYXRhKQogICAgaWYgaXNpbnN0YW5jZShhcnIsIGxpc3QpIGFuZCBsZW4oYXJyKSA+IDA6CiAgICAgICAgaXRlbSA9IGFyclswXQogICAgICAgIGFjY291bnQgPSBpdGVtLmdldCgnYWNjb3VudE5hbWUnLCAnJykKICAgICAgICBzbHVnID0gaXRlbS5nZXQoJ3Byb2plY3ROYW1lJywgJycpCiAgICAgICAgZ2lkID0gaXRlbS5nZXQoJ2dyb3VwJywgaXRlbS5nZXQoJ2lkJywgJycpKQogICAgICAgIGlmIGFjY291bnQgYW5kIHNsdWcgYW5kIGdpZDoKICAgICAgICAgICAgdXJsID0gJ2V4cCsnICsgc2x1ZyArICc6Ly9leHBvLWRldmVsb3BtZW50LWNsaWVudC8/dXJsPWh0dHBzOi8vdS5leHBvLmRldi91cGRhdGUvJyArIHN0cihnaWQpCiAgICAgICAgICAgIHByaW50KHVybCkKICAgICAgICAgICAgc3lzLmV4aXQoMCkKZXhjZXB0IEV4Y2VwdGlvbiBhcyBleDoKICAgIHByaW50KCdwYXJzZSBlcnJvcjogJyArIHN0cihleCksIGZpbGU9c3lzLnN0ZGVycikKCnRyeToKICAgIGRhdGEgPSBvcGVuKCcvdG1wL2Vhc19vdXRwdXQuanNvbicpLnJlYWQoKQogICAgbSA9IHJlLnNlYXJjaChyJ2V4cFsrYS16XSo6Ly9bXlxzIl0rJywgZGF0YSkKICAgIGlmIG06CiAgICAgICAgcHJpbnQobS5ncm91cCgwKSkKICAgICAgICBzeXMuZXhpdCgwKQpleGNlcHQgRXhjZXB0aW9uOgogICAgcGFzcwoKcHJpbnQoJ1VSTF9OT1RfRk9VTkQnKQo=" | base64 -d | python3)
+          echo "Preview URL: $URL"
+          printf '{"url":"%s","branch":"%s","time":"%s"}' \
+            "$URL" "${{ inputs.branch_name }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > preview-info.json
+          cat preview-info.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expo-preview-info
+          path: preview-info.json
+          retention-days: 7
